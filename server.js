@@ -1,6 +1,7 @@
 const express = require("express");
 const axios = require("axios");
 const fs = require("fs");
+const sharp = require("sharp");
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -64,17 +65,19 @@ app.post("/create-mockup", async (req, res) => {
     console.log("Download complete for job:", body.job_id);
     console.log("Local image path:", localImagePath);
 
-    // Placeholder for next step:
-    // generate mockup image here
-    // upload result somewhere
-    // send Slack reply back
+    const mockupPath = await generateMockup(localImagePath, body.job_id);
+
+    console.log("Mockup created for job:", body.job_id);
+    console.log("Mockup output path:", mockupPath);
 
   } catch (err) {
     console.error("Mockup job failed for:", body.job_id);
     console.error(err && err.stack ? err.stack : err);
   }
 });
+
 console.log("Has SLACK_BOT_TOKEN:", !!process.env.SLACK_BOT_TOKEN);
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
@@ -109,4 +112,19 @@ async function downloadSlackImage(url, jobId) {
     });
     writer.on("error", reject);
   });
+}
+
+async function generateMockup(imagePath, jobId) {
+  const outputPath = `/tmp/${jobId}_mockup.jpg`;
+
+  await sharp(imagePath)
+    .modulate({
+      saturation: 0.2,
+      brightness: 0.9
+    })
+    .tint("#111111")
+    .jpeg({ quality: 90 })
+    .toFile(outputPath);
+
+  return outputPath;
 }
