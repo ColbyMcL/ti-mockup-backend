@@ -1,3 +1,4 @@
+const path = require("path");
 const express = require("express");
 const axios = require("axios");
 const fs = require("fs");
@@ -54,26 +55,24 @@ app.post("/create-mockup", async (req, res) => {
     message: "Mockup job received by Railway backend."
   });
 
-  try {
-    console.log("Starting processing for job:", body.job_id);
+ try {
+  console.log("Starting processing for job:", body.job_id);
 
-    const localImagePath = await downloadSlackImage(
-      body.source_image_url,
-      body.job_id
-    );
+  const localImagePath = await downloadSlackImage(
+    body.source_image_url,
+    body.job_id
+  );
 
-    console.log("Download complete for job:", body.job_id);
-    console.log("Local image path:", localImagePath);
+  console.log("Download complete for job:", body.job_id);
+  console.log("Local image path:", localImagePath);
 
-    const mockupPath = await generateMockup(localImagePath, body.job_id);
+  const mockupPath = await generateMockup(localImagePath, body.job_id);
+  console.log("Mockup generated:", mockupPath);
 
-    console.log("Mockup created for job:", body.job_id);
-    console.log("Mockup output path:", mockupPath);
-
-  } catch (err) {
-    console.error("Mockup job failed for:", body.job_id);
-    console.error(err && err.stack ? err.stack : err);
-  }
+} catch (err) {
+  console.error("Mockup job failed for:", body.job_id);
+  console.error(err && err.stack ? err.stack : err);
+}
 });
 
 console.log("Has SLACK_BOT_TOKEN:", !!process.env.SLACK_BOT_TOKEN);
@@ -94,28 +93,46 @@ async function downloadSlackImage(url, jobId) {
   const response = await axios({
     url: url,
     method: "GET",
-    responseType: "stream",
+    responseType: "arraybuffer",
     headers: {
       Authorization: `Bearer ${slackBotToken}`
+    },
+    maxRedirects: 5,
+    validateStatus: function (status) {
+      return status >= 200 && status < 400;
     }
   });
 
-  const path = `/tmp/${jobId}.jpg`;
-  const writer = fs.createWriteStream(path);
+  const contentType = String(response.headers["content-type"] || "").toLowerCase();
+  console.log("Downloaded content-type:", contentType);
 
-  response.data.pipe(writer);
+  const bytes = Buffer.from(response.data);
+  console.log("Downloaded byte length:", bytes.length);
+  console.log("First 16 bytes hex:", bytes.subarray(0, 16).toString("hex"));
 
-  return new Promise((resolve, reject) => {
-    writer.on("finish", () => {
-      console.log("Image saved:", path);
-      resolve(path);
-    });
-    writer.on("error", reject);
-  });
+  let ext = ".jpg";
+  if (contentType.includes("png")) ext = ".png";
+  else if (contentType.includes("webp")) ext = ".webp";
+  else if (contentType.includes("jpeg") || contentType.includes("jpg")) ext = ".jpg";
+
+  const filePath = `/tmp/${jobId}${ext}`;
+  fs.writeFileSync(filePath, bytes);
+
+  console.log("Image saved:", filePath);
+
+  return filePath;
 }
 
 async function generateMockup(imagePath, jobId) {
   const outputPath = `/tmp/${jobId}_mockup.jpg`;
+
+  console.log("Generating mockup from:", imagePath);
+  console.log("File exists:", fs.existsSync(imagePath));
+  console.log("File size:", fs.statSync(imagePath).size);
+  console.log("File ext:", path.extname(imagePath));
+
+  const meta = await sharp(imagePath).metadata();
+  console.log("Input metadata:", meta);
 
   await sharp(imagePath)
     .modulate({
