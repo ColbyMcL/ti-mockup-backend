@@ -74,7 +74,7 @@ app.post("/create-mockup", async (req, res) => {
     console.error(err && err.stack ? err.stack : err);
   }
 });
-
+console.log("Has SLACK_BOT_TOKEN:", !!process.env.SLACK_BOT_TOKEN);
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
